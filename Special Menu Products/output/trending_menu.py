@@ -104,8 +104,7 @@ STANDARD_PANTRY = {
     "fresh cilantro", "lime wedge", "rice (4 oz)", "black beans (3 oz)",
     "pinto beans (3 oz)", "red salsa (2 oz)", "verde salsa (2 oz)",
     "guacamole (2 oz)", "hot sauce", "cooking oil", "cumin", "chili powder",
-    "garlic powder", "smoked paprika", "smoky adobo sauce (1 oz)",
-    "smoked pepper mayo (1 oz)", "adobo seasoning", "ancho chili powder",
+    "garlic powder", "smoked paprika", "adobo seasoning", "ancho chili powder",
 }
 
 # ---------------------------------------------------------------------------
@@ -509,32 +508,27 @@ def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> l
         print("[*] Fetching Reddit trends ...")
         reddit = fetch_reddit_trends(all_kw)
 
-
     for c in candidates:
         def avg(m: dict) -> float:
             vals = [m.get(kw, 0.0) for kw in c.trend_keywords]
             return round(sum(vals) / len(vals), 4)
 
         c.platform_scores = {
-            "tiktok": avg(tiktok), "instagram": avg(insta),
-            "reddit": avg(reddit), "google": avg(google), "x": avg(x_map)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            ,
+            "reddit": avg(reddit),
+            "google": avg(google),
         }
+
+
+
+
+
+
+
+
+
+
+
+
         c.trend_score = round(sum(PLATFORM_WEIGHTS[p] * s for p, s in c.platform_scores.items()), 4)
 
         in_stock = sum(1 for i in c.ingredients if i.in_stock)
@@ -560,11 +554,8 @@ def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> l
 # ---------------------------------------------------------------------------
 
 _PLATFORM_META = {
-    "tiktok":    ("TikTok",    "#ff0050", "#fff"),
-    "instagram": ("Instagram", "#c13584", "#fff"),
-    "reddit":    ("Reddit",    "#ff4500", "#fff"),
-    "google":    ("Google",    "#4285f4", "#fff"),
-    "x":         ("X",         "#14171a", "#fff"),
+    "reddit": ("Reddit", "#ff4500", "#fff"),
+    "google": ("Google", "#4285f4", "#fff"),
 }
 
 _CSS_RESET = """
@@ -685,7 +676,7 @@ def generate_index(top5: list[LTOCandidate], timestamp: str) -> str:
             <div class="tagline">{c.tagline}</div>
             <div class="pbadges">{_pbadges(c.platform_scores)}</div>
             <div class="meta">
-              <span class="pill p">${c.sale_price:.2f}</span>
+              <span class="pill p">£{c.sale_price:.2f}</span>
               <span class="pill m">{c.gross_margin_pct}% margin</span>
               <span class="pill s">Score {round(c.final_score * 100)}%</span>
             </div>
@@ -709,7 +700,7 @@ def generate_index(top5: list[LTOCandidate], timestamp: str) -> str:
   </header>
   <div class="grid">{"".join(cards)}</div>
   <footer>
-    Sources: Google Trends · Reddit (live) &nbsp;|&nbsp; TikTok · Instagram · X (curated May 2025)<br>
+    Sources: Google Trends · Reddit (live)<br>
     Weights: Trend 40% · Feasibility 30% · Margin 20% · Prep 10%
   </footer>
 </body>
@@ -724,13 +715,13 @@ def generate_detail(c: LTOCandidate, rank: int, total: int) -> str:
     # pricing cards
     pricing = f"""
     <div class="pgrid">
-      <div class="pc sale"><div class="lbl">Sale Price</div><div class="val">${c.sale_price:.2f}</div></div>
-      <div class="pc cost"><div class="lbl">Total COGS</div><div class="val">${c.total_cogs:.2f}</div></div>
-      <div class="pc profit"><div class="lbl">Gross Profit</div><div class="val">${c.gross_profit:.2f}</div></div>
+      <div class="pc sale"><div class="lbl">Sale Price</div><div class="val">£{c.sale_price:.2f}</div></div>
+      <div class="pc cost"><div class="lbl">Total COGS</div><div class="val">£{c.total_cogs:.2f}</div></div>
+      <div class="pc profit"><div class="lbl">Gross Profit</div><div class="val">£{c.gross_profit:.2f}</div></div>
       <div class="pc margin"><div class="lbl">Gross Margin</div><div class="val">{c.gross_margin_pct}%</div></div>
     </div>
     <p style="margin-top:14px;font-size:.82rem;color:#6a5038">
-      * COGS = food cost (${c.food_cost:.2f}) × {c.overhead_multiplier} overhead multiplier
+      * COGS = food cost (£{c.food_cost:.2f}) × {c.overhead_multiplier} overhead multiplier
     </p>"""
 
     # ingredients table
@@ -739,11 +730,11 @@ def generate_detail(c: LTOCandidate, rank: int, total: int) -> str:
         stock = f'<span class="sy">✓ In Stock</span>' if ing.in_stock else f'<span class="sn">⚠ Source</span>'
         rows.append(
             f"<tr><td>{ing.name}</td><td>{ing.quantity}</td>"
-            f"<td>{stock}</td><td class='cc'>${ing.unit_cost:.2f}</td></tr>"
+            f"<td>{stock}</td><td class='cc'>£{ing.unit_cost:.2f}</td></tr>"
         )
     rows.append(
         f"<tr class='tr'><td colspan='3'>Food Cost Subtotal</td>"
-        f"<td class='cc'>${c.food_cost:.2f}</td></tr>"
+        f"<td class='cc'>£{c.food_cost:.2f}</td></tr>"
     )
     ing_table = f"""
     <table>
@@ -852,7 +843,7 @@ def main() -> None:
     print(f"  {'Rank':<5} {'Name':<36} {'Score':>6} {'Price':>7} {'Margin':>8}")
     print("  " + "-" * 66)
     for rank, c in enumerate(top5, 1):
-        print(f"  #{rank:<4} {c.name:<36} {round(c.final_score*100):>5}%  ${c.sale_price:>5.2f}  {c.gross_margin_pct:>6.1f}%")
+        print(f"  #{rank:<4} {c.name:<36} {round(c.final_score*100):>5}%  £{c.sale_price:>5.2f}  {c.gross_margin_pct:>6.1f}%")
 
 
 if __name__ == "__main__":
