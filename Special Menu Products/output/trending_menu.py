@@ -21,11 +21,12 @@ Run:
 
 import argparse
 import json
+import math
 import os
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import requests
@@ -37,6 +38,10 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
+
+# Get a free YouTube Data API v3 key at https://console.cloud.google.com
+# Set as env var:  set YOUTUBE_API_KEY=your_key_here  (Windows)
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "")
 
@@ -516,48 +521,190 @@ def fetch_reddit_trends(keywords: list[str]) -> dict[str, float]:
     }
 
 
+def fetch_youtube_trends(keywords: list[str]) -> tuple[dict[str, float], bool]:
+    """
+    Scores keywords by total view count of the top 10 recent UK food videos
+    for each keyword. Requires a free YouTube Data API v3 key.
+    Score scale: log10(views) / 7  →  1M views ≈ 0.86, 10M ≈ 1.0, 10k ≈ 0.57
+    """
+    if not YOUTUBE_API_KEY:
+        print("  [warn] YOUTUBE_API_KEY not set — skipping YouTube")
+        print("         Get a free key at https://console.cloud.google.com")
+        return {kw: 0.50 for kw in keywords}, False
+
+    scores: dict[str, float] = {}
+    published_after = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    for kw in keywords:
+        try:
+            # Search for recent videos
+            search = requests.get(
+                "https://www.googleapis.com/youtube/v3/search",
+                params={
+                    "key": YOUTUBE_API_KEY,
+                    "q": f"{kw} food recipe",
+                    "type": "video",
+                    "regionCode": "GB",
+                    "relevanceLanguage": "en",
+                    "publishedAfter": published_after,
+                    "maxResults": 10,
+                    "order": "viewCount",
+                    "part": "id",
+                },
+                timeout=10,
+            )
+            search_data = search.json()
+
+            if "error" in search_data:
+                print(f"  [warn] YouTube API: {search_data['error']['message']}")
+                return {kw: 0.50 for kw in keywords}, False
+
+            video_ids = [i["id"]["videoId"] for i in search_data.get("items", []) if "videoId" in i.get("id", {})]
+            if not video_ids:
+                scores[kw] = 0.25
+                continue
+
+            # Fetch view counts
+            stats = requests.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={"key": YOUTUBE_API_KEY, "id": ",".join(video_ids), "part": "statistics"},
+                timeout=10,
+            )
+            total_views = sum(
+                int(item.get("statistics", {}).get("viewCount", 0))
+                for item in stats.json().get("items", [])
+            )
+
+            scores[kw] = round(min(math.log10(max(total_views, 1)) / 7.0, 1.0), 4)
+            time.sleep(0.2)
+
+        except Exception as exc:
+            print(f"  [warn] YouTube '{kw}': {exc}")
+            scores[kw] = 0.50
+
+    return scores, True
+
+
+def fetch_wikipedia_trends(keywords: list[str]) -> tuple[dict[str, float], bool]:
+    """
+    Scores keywords by English Wikipedia pageviews over the last 7 days.
+    Maps each keyword to a known food article title to avoid unreliable
+    search API calls. Articles not in the map get scored 0.25 (neutral).
+    Score scale: log10(weekly views) / 5  →  100k views ≈ 1.0, 10k ≈ 0.8, 1k ≈ 0.6
+    """
+    # Keyword substring → Wikipedia article title (exact, URL-encoded spaces as _)
+    ARTICLE_MAP = {
+        "birria":        "Birria",
+        "carnitas":      "Carnitas",
+        "quesadilla":    "Quesadilla",
+        "burrito":       "Burrito",
+        "guacamole":     "Guacamole",
+        "elote":         "Elote_(dish)",
+        "korean bbq":    "Korean_barbecue",
+        "kbbq":          "Korean_barbecue",
+        "gochujang":     "Gochujang",
+        "smash burger":  "Smash_burger",
+        "taco":          "Taco",
+        "hot honey":     "Hot_honey",
+        "al carbon":     "Carne_asada",
+        "pollo":         "Pollo_a_la_brasa",
+        "street corn":   "Elote_(dish)",
+        "cheese fries":  "Cheesy_chips",
+    }
+
+    now = datetime.now()
+    start_str = (now - timedelta(days=7)).strftime("%Y%m%d")
+    end_str = now.strftime("%Y%m%d")
+    wiki_headers = {"User-Agent": "TortillasLTOFinder/1.0 (food trend analysis)"}
+
+    def find_article(kw: str) -> Optional[str]:
+        kl = kw.lower()
+        for term, article in ARTICLE_MAP.items():
+            if term in kl:
+                return article
+        return None
+
+    def pageviews(article: str) -> int:
+        url = (
+            f"https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
+            f"/en.wikipedia/all-access/all-agents/{article}/daily/{start_str}/{end_str}"
+        )
+        r = requests.get(url, headers=wiki_headers, timeout=8)
+        if r.status_code != 200 or not r.text.strip():
+            return 0
+        return sum(item.get("views", 0) for item in r.json().get("items", []))
+
+    # Deduplicate — multiple keywords can map to the same article
+    article_cache: dict[str, int] = {}
+    scores: dict[str, float] = {}
+
+    for kw in keywords:
+        article = find_article(kw)
+        if not article:
+            scores[kw] = 0.25
+            continue
+        try:
+            if article not in article_cache:
+                article_cache[article] = pageviews(article)
+                time.sleep(0.5)
+            total = article_cache[article]
+            scores[kw] = round(min(math.log10(max(total, 1)) / 5.0, 1.0), 4)
+        except Exception as exc:
+            print(f"  [warn] Wikipedia '{article}': {exc}")
+            scores[kw] = 0.25
+
+    fetched = sum(1 for v in article_cache.values() if v > 0)
+    print(f"  {fetched}/{len(article_cache)} Wikipedia articles fetched")
+    return scores, True
+
 
 # ---------------------------------------------------------------------------
 # Scoring Engine
 # ---------------------------------------------------------------------------
 
-PLATFORM_WEIGHTS = {"reddit": 0.5, "google": 0.5}
-SCORE_WEIGHTS    = {"trend": 0.40, "feasibility": 0.30, "margin": 0.20, "prep": 0.10}
+# Base weights — normalised automatically if a platform is unavailable
+BASE_WEIGHTS = {"youtube": 0.35, "reddit": 0.25, "google": 0.25, "wikipedia": 0.15}
+SCORE_WEIGHTS = {"trend": 0.40, "feasibility": 0.30, "margin": 0.20, "prep": 0.10}
 
 
 def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> list[LTOCandidate]:
     all_kw = list({kw for c in candidates for kw in c.trend_keywords})
+    neutral = {kw: 0.50 for kw in all_kw}
 
     if offline:
         print("[*] Offline mode — skipping live fetches")
-        google, google_ok = {kw: 0.50 for kw in all_kw}, False
-        reddit = {kw: 0.50 for kw in all_kw}
+        sources = {"reddit": neutral, "google": neutral, "youtube": neutral, "wikipedia": neutral}
     else:
-        print("[*] Fetching Google Trends ...")
+        print("[*] Fetching Google signals ...")
         google, google_ok = fetch_google_trends(all_kw)
         print("[*] Fetching Reddit trends ...")
         reddit = fetch_reddit_trends(all_kw)
+        print("[*] Fetching YouTube trends ...")
+        youtube, youtube_ok = fetch_youtube_trends(all_kw)
+        print("[*] Fetching Wikipedia pageviews ...")
+        wikipedia, wiki_ok = fetch_wikipedia_trends(all_kw)
 
-    # If Google Trends was unavailable, weight Reddit at 100%
-    weights = {"reddit": 1.0} if not google_ok else PLATFORM_WEIGHTS
-    if not google_ok:
-        print("[*] Using Reddit-only trend scoring")
+        sources = {"reddit": reddit, "google": google if google_ok else None,
+                   "youtube": youtube if youtube_ok else None,
+                   "wikipedia": wikipedia if wiki_ok else None}
+
+    # Drop unavailable platforms and re-normalise weights to sum to 1.0
+    active = {p: s for p, s in sources.items() if s is not None}
+    raw_w = {p: BASE_WEIGHTS[p] for p in active}
+    total_w = sum(raw_w.values())
+    weights = {p: w / total_w for p, w in raw_w.items()}
+    print(f"[*] Active platforms: {', '.join(f'{p} ({w:.0%})' for p, w in weights.items())}")
 
     for c in candidates:
         def avg(m: dict) -> float:
             vals = [m.get(kw, 0.0) for kw in c.trend_keywords]
             return round(sum(vals) / len(vals), 4)
 
-        c.platform_scores = {"reddit": avg(reddit)}
-        if google_ok:
-            c.platform_scores["google"] = avg(google)
+        c.platform_scores = {p: avg(s) for p, s in active.items()}
 
 
 
-
-
-
-        c.trend_score = round(sum(weights[p] * s for p, s in c.platform_scores.items()), 4)
+        c.trend_score = round(sum(weights.get(p, 0) * s for p, s in c.platform_scores.items()), 4)
 
         in_stock = sum(1 for i in c.ingredients if i.in_stock)
         c.feasibility_score = round(in_stock / len(c.ingredients), 4)
@@ -582,8 +729,10 @@ def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> l
 # ---------------------------------------------------------------------------
 
 _PLATFORM_META = {
-    "reddit": ("Reddit", "#ff4500", "#fff"),
-    "google": ("Google", "#4285f4", "#fff"),
+    "youtube":   ("YouTube",   "#ff0000", "#fff"),
+    "reddit":    ("Reddit",    "#ff4500", "#fff"),
+    "google":    ("Google",    "#4285f4", "#fff"),
+    "wikipedia": ("Wikipedia", "#202122", "#fff"),
 }
 
 _CSS_RESET = """
