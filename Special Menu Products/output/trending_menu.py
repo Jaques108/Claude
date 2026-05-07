@@ -427,24 +427,43 @@ def fetch_google_trends(keywords: list[str]) -> dict[str, float]:
     if not HAS_PYTRENDS:
         print("  [warn] pytrends not installed — using neutral scores for Google Trends")
         return {kw: 0.50 for kw in keywords}
+
     scores: dict[str, float] = {}
-    try:
-        pt = TrendReq(hl="en-US", tz=360)
-        for i in range(0, len(keywords), 5):
-            batch = keywords[i:i + 5]
-            pt.build_payload(batch, cat=71, timeframe="now 7-d", geo="")
-            df = pt.interest_over_time()
-            if df.empty:
-                for kw in batch:
-                    scores[kw] = 0.30
-            else:
-                for kw in batch:
-                    scores[kw] = round(df[kw].mean() / 100, 4) if kw in df.columns else 0.30
-            time.sleep(1.2)
-    except Exception as exc:
-        print(f"  [warn] Google Trends error: {exc}")
-        for kw in keywords:
-            scores.setdefault(kw, 0.50)
+    pt = TrendReq(hl="en-GB", tz=0)
+    max_retries = 4
+
+    for i in range(0, len(keywords), 5):
+        batch = keywords[i:i + 5]
+        fetched = False
+
+        for attempt in range(max_retries):
+            try:
+                pt.build_payload(batch, cat=71, timeframe="now 7-d", geo="GB")
+                df = pt.interest_over_time()
+                if df.empty:
+                    for kw in batch:
+                        scores[kw] = 0.30
+                else:
+                    for kw in batch:
+                        scores[kw] = round(df[kw].mean() / 100, 4) if kw in df.columns else 0.30
+                fetched = True
+                # Polite delay between batches — keeps us under Google's rate limit
+                time.sleep(5.0 + i * 0.5)
+                break
+            except Exception as exc:
+                if "429" in str(exc) or "response with code 429" in str(exc):
+                    wait = 15 * (2 ** attempt)
+                    print(f"  [warn] Google Trends rate limited — retrying in {wait}s (attempt {attempt+1}/{max_retries})")
+                    time.sleep(wait)
+                else:
+                    print(f"  [warn] Google Trends error: {exc}")
+                    break
+
+        if not fetched:
+            print(f"  [warn] Google Trends gave up on batch {i//5 + 1} — using neutral scores")
+            for kw in batch:
+                scores.setdefault(kw, 0.50)
+
     return scores
 
 
