@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "PowerShell($items = Get-ChildItem -Path \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\" -Recurse -File | Where-Object { $_.FullName -notmatch \"\\\\.venv\" }; $items | ForEach-Object { $_.FullName })",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\" | Select-Object Name, @{N='Size\\(bytes\\)';E={$_.Length}} | Format-Table)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\" | Select-Object Name, @{N='Size\\(bytes\\)';E={$_.Length}} | Format-Table)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\" -Recurse -File)",
+      "Bash(Select-Object -Property FullName)",
+      "Bash(Sort-Object FullName)"
     ]
   }
 }
