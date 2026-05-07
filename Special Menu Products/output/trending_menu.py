@@ -423,48 +423,39 @@ CANDIDATES: list[LTOCandidate] = [
 # Platform Scrapers
 # ---------------------------------------------------------------------------
 
-def fetch_google_trends(keywords: list[str]) -> dict[str, float]:
+def fetch_google_trends(keywords: list[str]) -> tuple[dict[str, float], bool]:
+    """
+    Returns (scores, success). On a 429 or missing pytrends, returns
+    neutral scores and success=False so the caller can drop Google from
+    the weighting entirely.
+    """
     if not HAS_PYTRENDS:
-        print("  [warn] pytrends not installed — using neutral scores for Google Trends")
-        return {kw: 0.50 for kw in keywords}
+        print("  [warn] pytrends not installed — skipping Google Trends")
+        return {kw: 0.50 for kw in keywords}, False
 
     scores: dict[str, float] = {}
     pt = TrendReq(hl="en-GB", tz=0)
-    max_retries = 4
 
     for i in range(0, len(keywords), 5):
         batch = keywords[i:i + 5]
-        fetched = False
+        try:
+            pt.build_payload(batch, cat=71, timeframe="now 7-d", geo="GB")
+            df = pt.interest_over_time()
+            if df.empty:
+                for kw in batch:
+                    scores[kw] = 0.30
+            else:
+                for kw in batch:
+                    scores[kw] = round(df[kw].mean() / 100, 4) if kw in df.columns else 0.30
+            time.sleep(2.0)
+        except Exception as exc:
+            if "429" in str(exc) or "response with code 429" in str(exc):
+                print("  [warn] Google Trends rate limited — falling back to Reddit-only scoring")
+            else:
+                print(f"  [warn] Google Trends error: {exc}")
+            return {kw: 0.50 for kw in keywords}, False
 
-        for attempt in range(max_retries):
-            try:
-                pt.build_payload(batch, cat=71, timeframe="now 7-d", geo="GB")
-                df = pt.interest_over_time()
-                if df.empty:
-                    for kw in batch:
-                        scores[kw] = 0.30
-                else:
-                    for kw in batch:
-                        scores[kw] = round(df[kw].mean() / 100, 4) if kw in df.columns else 0.30
-                fetched = True
-                # Polite delay between batches — keeps us under Google's rate limit
-                time.sleep(5.0 + i * 0.5)
-                break
-            except Exception as exc:
-                if "429" in str(exc) or "response with code 429" in str(exc):
-                    wait = 15 * (2 ** attempt)
-                    print(f"  [warn] Google Trends rate limited — retrying in {wait}s (attempt {attempt+1}/{max_retries})")
-                    time.sleep(wait)
-                else:
-                    print(f"  [warn] Google Trends error: {exc}")
-                    break
-
-        if not fetched:
-            print(f"  [warn] Google Trends gave up on batch {i//5 + 1} — using neutral scores")
-            for kw in batch:
-                scores.setdefault(kw, 0.50)
-
-    return scores
+    return scores, True
 
 
 def fetch_reddit_trends(keywords: list[str]) -> dict[str, float]:
@@ -519,23 +510,27 @@ def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> l
 
     if offline:
         print("[*] Offline mode — skipping live fetches")
-        google = {kw: 0.50 for kw in all_kw}
+        google, google_ok = {kw: 0.50 for kw in all_kw}, False
         reddit = {kw: 0.50 for kw in all_kw}
     else:
         print("[*] Fetching Google Trends ...")
-        google = fetch_google_trends(all_kw)
+        google, google_ok = fetch_google_trends(all_kw)
         print("[*] Fetching Reddit trends ...")
         reddit = fetch_reddit_trends(all_kw)
+
+    # If Google Trends was unavailable, weight Reddit at 100%
+    weights = {"reddit": 1.0} if not google_ok else PLATFORM_WEIGHTS
+    if not google_ok:
+        print("[*] Using Reddit-only trend scoring")
 
     for c in candidates:
         def avg(m: dict) -> float:
             vals = [m.get(kw, 0.0) for kw in c.trend_keywords]
             return round(sum(vals) / len(vals), 4)
 
-        c.platform_scores = {
-            "reddit": avg(reddit),
-            "google": avg(google),
-        }
+        c.platform_scores = {"reddit": avg(reddit)}
+        if google_ok:
+            c.platform_scores["google"] = avg(google)
 
 
 
@@ -545,10 +540,7 @@ def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> l
 
 
 
-
-
-
-        c.trend_score = round(sum(PLATFORM_WEIGHTS[p] * s for p, s in c.platform_scores.items()), 4)
+        c.trend_score = round(sum(weights[p] * s for p, s in c.platform_scores.items()), 4)
 
         in_stock = sum(1 for i in c.ingredients if i.in_stock)
         c.feasibility_score = round(in_stock / len(c.ingredients), 4)
