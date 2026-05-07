@@ -10,29 +10,25 @@ Output:
     output/detail_1..5.html     — per-product detail & pricing pages
 
 Data Sources:
-    Google Trends  — via pytrends (live data)
-    Reddit         — via public JSON API (live data, no auth required)
+    Google Trends  — daily RSS feed + Autocomplete API (no API key needed)
+    Reddit         — public JSON API (no auth required)
 
 Run:
-    pip install pytrends requests beautifulsoup4
+    pip install requests
     python trending_menu.py              # live Google + Reddit + HTML output
     python trending_menu.py --offline    # skip all live fetching
 """
 
 import argparse
+import json
 import os
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
 import requests
-
-try:
-    from pytrends.request import TrendReq
-    HAS_PYTRENDS = True
-except ImportError:
-    HAS_PYTRENDS = False
 
 HEADERS = {
     "User-Agent": (
@@ -423,37 +419,73 @@ CANDIDATES: list[LTOCandidate] = [
 # Platform Scrapers
 # ---------------------------------------------------------------------------
 
+def _fetch_trending_rss() -> set[str]:
+    """
+    Pull recent UK food trend headlines from Google News RSS.
+    Free, no auth, reflects what food topics are actually in the news.
+    """
+    queries = ["food trends UK", "trending food", "viral food UK"]
+    headlines: set[str] = set()
+    for q in queries:
+        url = (
+            f"https://news.google.com/rss/search"
+            f"?q={q.replace(' ', '+')}&hl=en-GB&gl=GB&ceid=GB:en"
+        )
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=10)
+            r.raise_for_status()
+            root = ET.fromstring(r.text)
+            for item in root.iter("item"):
+                title = item.findtext("title", "")
+                headlines.add(title.lower())
+            time.sleep(0.5)
+        except Exception as exc:
+            print(f"  [warn] Google News RSS ({q}): {exc}")
+    return headlines
+
+
+def _autocomplete_score(keyword: str, geo: str = "GB") -> float:
+    """
+    Score a keyword 0–1 using Google's Autocomplete API.
+    Higher rank in suggestions = higher score. Falls back to 0.25 if absent.
+    """
+    try:
+        r = requests.get(
+            "https://suggestqueries.google.com/complete/search",
+            params={"client": "firefox", "q": keyword, "hl": "en-GB", "gl": geo},
+            headers=HEADERS,
+            timeout=8,
+        )
+        suggestions = json.loads(r.text)[1]
+        kw_words = set(keyword.lower().split())
+        for rank, s in enumerate(suggestions[:10]):
+            overlap = len(kw_words & set(s.lower().split())) / max(len(kw_words), 1)
+            if overlap >= 0.5:
+                # Top suggestion = ~1.0, position 10 = ~0.50
+                return round(0.50 + overlap * (1.0 - rank / 10) * 0.50, 4)
+        return 0.25
+    except Exception as exc:
+        print(f"  [warn] Autocomplete '{keyword}': {exc}")
+        return 0.50
+
+
 def fetch_google_trends(keywords: list[str]) -> tuple[dict[str, float], bool]:
     """
-    Returns (scores, success). On a 429 or missing pytrends, returns
-    neutral scores and success=False so the caller can drop Google from
-    the weighting entirely.
+    Scores keywords using two free, no-auth Google endpoints:
+      1. Daily Trends RSS  — +0.25 bonus if keyword words appear in today's hot topics
+      2. Autocomplete API  — base score from search suggestion rank (0.25–1.0)
     """
-    if not HAS_PYTRENDS:
-        print("  [warn] pytrends not installed — skipping Google Trends")
-        return {kw: 0.50 for kw in keywords}, False
+    print("  Fetching Google Trends RSS ...")
+    trending = _fetch_trending_rss()
+    print(f"  {len(trending)} trending topics found")
 
     scores: dict[str, float] = {}
-    pt = TrendReq(hl="en-GB", tz=0)
-
-    for i in range(0, len(keywords), 5):
-        batch = keywords[i:i + 5]
-        try:
-            pt.build_payload(batch, cat=71, timeframe="now 7-d", geo="GB")
-            df = pt.interest_over_time()
-            if df.empty:
-                for kw in batch:
-                    scores[kw] = 0.30
-            else:
-                for kw in batch:
-                    scores[kw] = round(df[kw].mean() / 100, 4) if kw in df.columns else 0.30
-            time.sleep(2.0)
-        except Exception as exc:
-            if "429" in str(exc) or "response with code 429" in str(exc):
-                print("  [warn] Google Trends rate limited — falling back to Reddit-only scoring")
-            else:
-                print(f"  [warn] Google Trends error: {exc}")
-            return {kw: 0.50 for kw in keywords}, False
+    for kw in keywords:
+        base = _autocomplete_score(kw)
+        kw_words = set(kw.lower().split())
+        bonus = 0.25 if any(any(w in t for w in kw_words) for t in trending) else 0.0
+        scores[kw] = round(min(base + bonus, 1.0), 4)
+        time.sleep(0.3)
 
     return scores, True
 
@@ -483,18 +515,6 @@ def fetch_reddit_trends(keywords: list[str]) -> dict[str, float]:
         for kw in keywords
     }
 
-
-
-def _match_known(keywords: list[str], known: dict[str, float], default: float) -> dict[str, float]:
-    scores: dict[str, float] = {}
-    for kw in keywords:
-        kw_lower = kw.lower()
-        best = default
-        for term, score in known.items():
-            if term in kw_lower or any(w in kw_lower for w in term.split()):
-                best = max(best, score)
-        scores[kw] = best
-    return scores
 
 
 # ---------------------------------------------------------------------------
@@ -531,9 +551,6 @@ def score_candidates(candidates: list[LTOCandidate], offline: bool = False) -> l
         c.platform_scores = {"reddit": avg(reddit)}
         if google_ok:
             c.platform_scores["google"] = avg(google)
-
-
-
 
 
 
