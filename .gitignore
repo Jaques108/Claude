@@ -1,2 +1,8 @@
 .idea/
 .env
+sports/api_key.txt
+sports/gemini_api_key.txt
+sports/groq_api_key.txt
+sports/data/
+sports/logs/
+sports/briefings/

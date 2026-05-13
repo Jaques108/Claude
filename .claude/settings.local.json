@@ -8,7 +8,13 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\" -Recurse -File)",
       "Bash(Select-Object -Property FullName)",
       "Bash(Sort-Object FullName)",
-      "Bash(python \"Special Menu Products/check_stock.py\")"
+      "Bash(python \"Special Menu Products/check_stock.py\")",
+      "Bash(Get-ChildItem C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude -Exclude .venv)",
+      "Bash(Format-Table Name, LastWriteTime)",
+      "PowerShell(& \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\\\\sports\\\\display.py\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\jakem\\\\PycharmProjects\\\\Claude\\\\sports\" -Recurse -File)",
+      "Bash(Select-Object FullName)",
+      "Bash(git add *)"
     ]
   }
 }
