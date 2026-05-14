@@ -1,0 +1,55 @@
+2026-05-13 15:10:43,711 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:10:43,712 [INFO] Fetching standings ...
+2026-05-13 15:10:44,130 [INFO] Fetching recent results (past 7 days) ...
+2026-05-13 15:10:44,688 [INFO] Fetching upcoming fixtures (next 7 days) ...
+2026-05-13 15:10:45,273 [INFO] Fetching top scorers ...
+2026-05-13 15:10:52,534 [INFO] Saved → C:\Users\jakem\PycharmProjects\Claude\sports\data\2026-05-13.json
+2026-05-13 15:10:52,534 [INFO] League leader: Arsenal FC  (79 pts)
+2026-05-13 15:10:52,534 [INFO] Recent fixtures: 10
+2026-05-13 15:10:52,534 [INFO] Upcoming fixtures: 11
+2026-05-13 15:10:52,535 [INFO] Top scorer: Erling Haaland — 26 goals
+2026-05-13 15:10:52,535 [INFO] === Collection complete ===
+2026-05-13 15:10:57,543 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:10:57,543 [ERROR] No API key found. Set the FOOTBALL_API_KEY environment variable or create sports/api_key.txt containing just the key.
+2026-05-13 15:11:42,507 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:11:42,509 [ERROR] No API key found. Set the FOOTBALL_API_KEY environment variable or create sports/api_key.txt containing just the key.
+2026-05-13 15:12:35,363 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:12:35,363 [INFO] Fetching standings ...
+2026-05-13 15:12:35,721 [INFO] Fetching recent results (past 7 days) ...
+2026-05-13 15:12:36,530 [INFO] Fetching upcoming fixtures (next 7 days) ...
+2026-05-13 15:12:37,009 [INFO] Fetching top scorers ...
+2026-05-13 15:12:40,719 [INFO] Saved → C:\Users\jakem\PycharmProjects\Claude\sports\data\2026-05-13.json
+2026-05-13 15:12:40,721 [INFO] League leader: Arsenal FC  (79 pts)
+2026-05-13 15:12:40,731 [INFO] Recent fixtures: 10
+2026-05-13 15:12:40,731 [INFO] Upcoming fixtures: 11
+2026-05-13 15:12:40,731 [INFO] Top scorer: Erling Haaland — 26 goals
+2026-05-13 15:12:40,731 [INFO] === Collection complete ===
+2026-05-13 15:12:48,894 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:12:48,894 [ERROR] No API key found. Set the FOOTBALL_API_KEY environment variable or create sports/api_key.txt containing just the key.
+2026-05-13 15:14:13,841 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:14:13,841 [INFO] Fetching standings ...
+2026-05-13 15:14:14,265 [INFO] Fetching recent results (past 7 days) ...
+2026-05-13 15:14:14,676 [INFO] Fetching upcoming fixtures (next 7 days) ...
+2026-05-13 15:14:15,147 [INFO] Fetching top scorers ...
+2026-05-13 15:14:17,091 [INFO] Saved → C:\Users\jakem\PycharmProjects\Claude\sports\data\2026-05-13.json
+2026-05-13 15:14:17,091 [INFO] League leader: Arsenal FC  (79 pts)
+2026-05-13 15:14:17,092 [INFO] Recent fixtures: 10
+2026-05-13 15:14:17,092 [INFO] Upcoming fixtures: 11
+2026-05-13 15:14:17,092 [INFO] Top scorer: Erling Haaland — 26 goals
+2026-05-13 15:14:17,092 [INFO] === Collection complete ===
+2026-05-13 15:14:24,981 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-13 15:14:24,982 [ERROR] No API key found. Set the FOOTBALL_API_KEY environment variable or create sports/api_key.txt containing just the key.
+2026-05-14 00:53:16,861 [INFO] === Premier League Collector started — Wednesday ===
+2026-05-14 00:53:16,862 [INFO] Fetching standings ...
+2026-05-14 00:53:17,417 [INFO] Fetching recent results (past 7 days) ...
+2026-05-14 00:53:17,872 [INFO] Fetching upcoming fixtures (next 7 days) ...
+2026-05-14 00:53:18,298 [INFO] Fetching top scorers ...
+2026-05-14 00:53:21,971 [INFO] Saved → C:\Users\jakem\PycharmProjects\Claude\sports\data\2026-05-13.json
+2026-05-14 00:53:21,971 [INFO] League leader: Arsenal FC  (79 pts)
+2026-05-14 00:53:21,972 [INFO] Recent fixtures: 11
+2026-05-14 00:53:21,972 [INFO] Upcoming fixtures: 11
+2026-05-14 00:53:21,972 [INFO] Top scorer: Erling Haaland — 26 goals
+2026-05-14 00:53:21,972 [INFO] === Collection complete ===
+2026-05-14 00:53:23,537 [INFO] === Running Claude agent briefing ===
+2026-05-14 00:53:24,240 [INFO] HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-14 00:53:25,019 [INFO] Briefing saved.
